@@ -1,0 +1,112 @@
+/* ==========================================================
+ *  RoboScript - Analizador sintáctico (CUP)
+ *  Genera: src/roboscript/Parser.java y sym.java
+ * ========================================================== */
+package roboscript;
+
+import java_cup.runtime.*;
+import java.util.*;
+
+parser code {:
+    public Estadisticas stats = new Estadisticas();
+    public List<String> erroresSintacticos = new ArrayList<>();
+
+    private static String nombreToken(int id) {
+        switch (id) {
+            case sym.EOF:             return "fin de archivo";
+            case sym.ROBOT:           return "ROBOT";
+            case sym.INICIO:          return "INICIO";
+            case sym.AVANZAR:         return "AVANZAR";
+            case sym.RETROCEDER:      return "RETROCEDER";
+            case sym.GIRAR:           return "GIRAR";
+            case sym.DERECHA:         return "DERECHA";
+            case sym.IZQUIERDA:       return "IZQUIERDA";
+            case sym.SEGUIR:          return "SEGUIR";
+            case sym.LINEA:           return "LINEA";
+            case sym.LEVANTAR:        return "LEVANTAR";
+            case sym.MOVER:           return "MOVER";
+            case sym.SOLTAR:          return "SOLTAR";
+            case sym.REPETIR:         return "REPETIR";
+            case sym.SI:              return "SI";
+            case sym.SINO:            return "SINO";
+            case sym.FIN:             return "FIN";
+            case sym.OBSTACULO:       return "OBSTACULO";
+            case sym.VELOCIDAD:       return "VELOCIDAD";
+            case sym.T_CODIGO_ROBOT:  return "T_CODIGO_ROBOT";
+            case sym.T_CODIGO_ZONA:   return "T_CODIGO_ZONA";
+            case sym.T_CODIGO_OBJETO: return "T_CODIGO_OBJETO";
+            case sym.T_COORDENADA:    return "T_COORDENADA";
+            case sym.T_PORCENTAJE:    return "T_PORCENTAJE";
+            case sym.T_DURACION:      return "T_DURACION";
+            case sym.T_NUMERO:        return "T_NUMERO";
+            default:                  return "token#" + id;
+        }
+    }
+
+    /* Se invoca ante el primer error sintáctico. Línea = cur.left, columna = cur.right */
+    @Override
+    public void syntax_error(Symbol cur) {
+        String encontrado = (cur.sym == sym.EOF) ? "fin de archivo" : "'" + cur.value + "'";
+        StringBuilder esperados = new StringBuilder();
+        try {
+            for (Integer id : expected_token_ids()) {
+                if (id == sym.error) continue;
+                if (esperados.length() > 0) esperados.append(", ");
+                esperados.append(nombreToken(id));
+            }
+        } catch (Exception e) { /* sin lista de esperados */ }
+        erroresSintacticos.add(String.format(
+            "Error sintáctico en línea %d, columna %d: se encontró %s; se esperaba: %s",
+            cur.left, cur.right, encontrado, esperados));
+    }
+
+    /* Modo pánico desactivado: el análisis se detiene en el primer error. */
+    @Override
+    public void unrecovered_syntax_error(Symbol cur) throws java.lang.Exception { }
+:};
+
+/* ---------------- Terminales ---------------- */
+terminal ROBOT, INICIO, AVANZAR, RETROCEDER, GIRAR, DERECHA, IZQUIERDA, SEGUIR, LINEA,
+         LEVANTAR, MOVER, SOLTAR, REPETIR, SI, SINO, FIN, OBSTACULO, VELOCIDAD;
+terminal String T_CODIGO_ROBOT, T_CODIGO_ZONA, T_CODIGO_OBJETO, T_COORDENADA,
+                T_PORCENTAJE, T_DURACION, T_NUMERO;
+
+/* ---------------- No terminales ---------------- */
+non terminal programa, encabezado, instrucciones, instruccion, simple, control;
+
+start with programa;
+
+/* ---------------- Gramática ---------------- */
+programa      ::= encabezado instrucciones ;
+
+encabezado    ::= ROBOT T_CODIGO_ROBOT INICIO T_COORDENADA ;
+
+instrucciones ::= instrucciones instruccion
+               |  instruccion ;
+
+instruccion   ::= simple
+               |  control ;
+
+simple ::= AVANZAR T_NUMERO              {: parser.stats.avanzar++; :}
+        |  AVANZAR T_DURACION            {: parser.stats.avanzar++; :}
+        |  RETROCEDER T_NUMERO           {: parser.stats.retroceder++; :}
+        |  RETROCEDER T_DURACION         {: parser.stats.retroceder++; :}
+        |  GIRAR DERECHA                 {: parser.stats.giroDerecha++; :}
+        |  GIRAR IZQUIERDA               {: parser.stats.giroIzquierda++; :}
+        |  SEGUIR LINEA                  {: parser.stats.seguirLinea++; :}
+        |  SEGUIR LINEA T_DURACION       {: parser.stats.seguirLinea++; :}
+        |  LEVANTAR T_CODIGO_OBJETO      {: parser.stats.levantar++; :}
+        |  MOVER T_CODIGO_ZONA           {: parser.stats.mover++; :}
+        |  MOVER T_COORDENADA            {: parser.stats.mover++; :}
+        |  SOLTAR                        {: parser.stats.soltar++; :}
+        |  SOLTAR T_CODIGO_ZONA          {: parser.stats.soltar++; :}
+        |  VELOCIDAD T_PORCENTAJE        {: parser.stats.velocidad++; :}
+        ;
+
+control ::= REPETIR T_NUMERO instrucciones FIN
+              {: parser.stats.repetir++; :}
+         |  SI OBSTACULO instrucciones FIN
+              {: parser.stats.si++; :}
+         |  SI OBSTACULO instrucciones SINO instrucciones FIN
+              {: parser.stats.si++; parser.stats.sino++; :}
+         ;
